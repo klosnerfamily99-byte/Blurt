@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BLURT</title>
+<style>
+  html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:Arial,Helvetica,sans-serif;-webkit-user-select:none;user-select:none;touch-action:none;}
+  #gameCanvas{display:block;width:100%;height:100%;}
+
+  /* ---------- MENU ---------- */
+  #menu{
+    position:fixed;inset:0;z-index:50;
+    background:radial-gradient(ellipse at center, #3a0000 0%, #0a0000 70%, #000 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;
+  }
+  #menu h1{
+    font-size:4em;letter-spacing:.3em;margin:0 0 .1em 0;color:#ff2b2b;
+    text-shadow:0 0 20px #ff0000, 0 0 40px #800000;
+  }
+  #menu p.tag{color:#aaa;margin-top:0;margin-bottom:1.5em;letter-spacing:.1em;font-size:.9em;}
+  #skinRow{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;max-width:900px;margin-bottom:1.5em;}
+  .skinCard{
+    width:140px;background:#1a1a1a;border:3px solid #444;border-radius:10px;padding:10px;text-align:center;cursor:pointer;
+    transition:transform .15s, border-color .15s;
+  }
+  .skinCard:hover{transform:translateY(-4px);}
+  .skinCard.selected{border-color:#ff2b2b;box-shadow:0 0 18px rgba(255,0,0,.6);}
+  .skinSwatch{width:60px;height:60px;border-radius:50%;margin:0 auto 8px;border:2px solid #555;}
+  .skinCard h3{margin:0 0 4px;font-size:1em;color:#fff;}
+  .skinCard p{margin:0;font-size:.72em;color:#bbb;line-height:1.3em;}
+  #startBtn{
+    padding:16px 50px;font-size:1.3em;letter-spacing:.15em;background:#ff2b2b;border:none;color:#fff;border-radius:6px;
+    cursor:pointer;box-shadow:0 0 25px rgba(255,0,0,.7);
+  }
+  #startBtn:active{transform:scale(.96);}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:20;display:none;font-family:Arial;}
+  #healthWrap{position:absolute;left:20px;bottom:20px;width:220px;}
+  #healthBarBg{width:100%;height:22px;background:#330000;border:2px solid #fff;border-radius:4px;overflow:hidden;}
+  #healthBar{height:100%;width:100%;background:linear-gradient(90deg,#ff0000,#ff7a7a);transition:width .15s;}
+  #healthText{color:#fff;font-size:.8em;margin-top:3px;text-shadow:1px 1px 2px #000;}
+  #aliveCount{position:absolute;top:16px;left:50%;transform:translateX(-50%);color:#fff;font-size:1.4em;
+    text-shadow:0 0 8px #ff0000;letter-spacing:.05em;}
+  #stormTimer{position:absolute;top:55px;left:50%;transform:translateX(-50%);color:#ff5555;font-size:.95em;text-shadow:0 0 6px #000;}
+  #ammoText{position:absolute;right:20px;bottom:20px;color:#fff;font-size:1.4em;text-shadow:0 0 6px #000;}
+  #skinTag{position:absolute;top:16px;right:20px;color:#ff8888;font-size:.85em;text-shadow:0 0 6px #000;text-align:right;}
+  #crosshair{position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;}
+  #crosshair:before,#crosshair:after{content:'';position:absolute;background:#fff;box-shadow:0 0 4px #000;}
+  #crosshair:before{left:8px;top:0;width:2px;height:18px;}
+  #crosshair:after{left:0;top:8px;width:18px;height:2px;}
+
+  #endScreen{
+    position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.85);display:none;
+    flex-direction:column;align-items:center;justify-content:center;color:#fff;
+  }
+  #endScreen h1{font-size:3.5em;margin:0;letter-spacing:.1em;}
+  #endScreen p{font-size:1.1em;color:#ccc;}
+  #endScreen button{margin-top:20px;padding:14px 40px;font-size:1.1em;background:#ff2b2b;border:none;color:#fff;border-radius:6px;}
+
+  /* ---------- mobile controls ---------- */
+  #touchControls{position:fixed;inset:0;z-index:21;display:none;pointer-events:none;}
+  #joyZone{position:absolute;left:0;bottom:0;width:45%;height:55%;pointer-events:auto;}
+  #joyBase{position:absolute;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);display:none;}
+  #joyStick{position:absolute;width:50px;height:50px;border-radius:50%;background:rgba(255,40,40,.55);display:none;}
+  #lookZone{position:absolute;right:0;bottom:0;width:55%;height:55%;pointer-events:auto;}
+  #shootBtn{
+    position:absolute;right:30px;bottom:80px;width:90px;height:90px;border-radius:50%;
+    background:rgba(255,30,30,.45);border:3px solid rgba(255,255,255,.6);pointer-events:auto;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:.9em;letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<!-- MENU -->
+<div id="menu">
+  <h1>BLURT</h1>
+  <p class="tag">100 enter. 1 leaves. choose your skin.</p>
+  <div id="skinRow"></div>
+  <button id="startBtn">DROP IN</button>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="aliveCount">100 ALIVE</div>
+  <div id="stormTimer">Storm closing in...</div>
+  <div id="skinTag"></div>
+  <div id="healthWrap">
+    <div id="healthBarBg"><div id="healthBar"></div></div>
+    <div id="healthText">100 / 100</div>
+  </div>
+  <div id="ammoText">∞</div>
+  <div id="crosshair"></div>
+</div>
+
+<div id="touchControls">
+  <div id="joyZone"><div id="joyBase"></div><div id="joyStick"></div></div>
+  <div id="lookZone"></div>
+  <div id="shootBtn">FIRE</div>
+</div>
+
+<div id="endScreen">
+  <h1 id="endTitle">VICTORY</h1>
+  <p id="endSub">You are the last one standing.</p>
+  <button onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   BLURT — single-file browser battle royale
+   ============================================================ */
+
+const SKINS = [
+  { id:'recruit',  name:'Recruit',  color:0x6b7280, desc:'Balanced. No bonus, no penalty.',
+    hp:100, speed:9.5,  dmg:14, range:60,  fireDelay:0.45 },
+  { id:'wraith',   name:'Wraith',   color:0x7c3aed, desc:'Faster movement. Smaller, harder to hit.',
+    hp:90,  speed:13.5, dmg:12, range:55,  fireDelay:0.40 },
+  { id:'brute',    name:'Brute',    color:0xb45309, desc:'More HP, hits harder up close. Slower.',
+    hp:150, speed:7.5,  dmg:20, range:45,  fireDelay:0.55 },
+  { id:'medic',    name:'Medic',    color:0x10b981, desc:'Regenerates health slowly over time.',
+    hp:100, speed:9.5,  dmg:13, range:55,  fireDelay:0.45, regen:2.5 },
+  { id:'marksman', name:'Marksman', color:0xeab308, desc:'Long range, big damage. Slower reload.',
+    hp:90,  speed:9.0,  dmg:26, range:95,  fireDelay:0.85 },
+];
+
+let chosenSkinIndex = 0;
+
+/* ---------------- build skin selection menu ---------------- */
+const skinRow = document.getElementById('skinRow');
+SKINS.forEach((s,i)=>{
+  const card = document.createElement('div');
+  card.className = 'skinCard' + (i===0?' selected':'');
+  card.innerHTML = `<div class="skinSwatch" style="background:#${s.color.toString(16).padStart(6,'0')}"></div>
+                     <h3>${s.name}</h3><p>${s.desc}</p>`;
+  card.onclick = ()=>{
+    document.querySelectorAll('.skinCard').forEach(c=>c.classList.remove('selected'));
+    card.classList.add('selected');
+    chosenSkinIndex = i;
+  };
+  skinRow.appendChild(card);
+});
+
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+document.getElementById('startBtn').onclick = ()=>{
+  document.getElementById('menu').style.display='none';
+  document.getElementById('hud').style.display='block';
+  if(isTouch) document.getElementById('touchControls').style.display='block';
+  startGame();
+};
+
+/* ============================================================
+   THREE.JS SETUP
+   ============================================================ */
+const canvas = document.getElementById('gameCanvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fc1d9);
+scene.fog = new THREE.Fog(0x9fc1d9, 60, 220);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 500);
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* lighting */
+const hemi = new THREE.HemisphereLight(0xffffff, 0x3a2a1a, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(60,90,40);
+scene.add(sun);
+
+/* ============================================================
+   ARENA — Hunger-Games-style circular clearing in a forest,
+   with a cornucopia-like structure in the center.
+   ============================================================ */
+const ARENA_RADIUS = 130;
+
+// ground
+const groundGeo = new THREE.CircleGeometry(ARENA_RADIUS+40, 64);
+const groundMat = new THREE.MeshLambertMaterial({color:0x4d7a3a});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// central clearing patch (lighter dirt, like the cornucopia field)
+const clearingGeo = new THREE.CircleGeometry(34, 48);
+const clearingMat = new THREE.MeshLambertMaterial({color:0x9c8454});
+const clearing = new THREE.Mesh(clearingGeo, clearingMat);
+clearing.rotation.x = -Math.PI/2;
+clearing.position.y = 0.02;
+scene.add(clearing);
+
+// cornucopia (golden horn, simplified as a curved gold cone cluster)
+function buildCornucopia(){
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0xd4af37, metalness:0.6, roughness:0.35});
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(3.2, 14, 12, 1, true), mat);
+  horn.rotation.z = Math.PI/2.4;
+  horn.position.set(0, 3, 0);
+  group.add(horn);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(4,5,2,16), mat);
+  base.position.y = 0.5;
+  group.add(base);
+  group.position.set(0,0,0);
+  return group;
+}
+scene.add(buildCornucopia());
+
+// trees ringing the clearing (cone + cylinder), scattered out to arena edge & beyond
+function makeTree(x,z, scale){
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshLambertMaterial({color:0x4b3621});
+  const leafMat = new THREE.MeshLambertMaterial({color:0x2f5d2f});
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,4,6), trunkMat);
+  trunk.position.y = 2;
+  g.add(trunk);
+  const leaves = new THREE.Mesh(new THREE.ConeGeometry(2.6,6,8), leafMat);
+  leaves.position.y = 6;
+  g.add(leaves);
+  g.position.set(x,0,z);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+const treeColliders = []; // {x,z,r}
+const treeGroup = new THREE.Group();
+for(let i=0;i<260;i++){
+  const ang = Math.random()*Math.PI*2;
+  const dist = 40 + Math.random()*150; // mostly outside the 34-radius clearing
+  const x = Math.cos(ang)*dist;
+  const z = Math.sin(ang)*dist;
+  if(dist < 38) continue;
+  const scale = 0.8 + Math.random()*0.9;
+  treeGroup.add(makeTree(x,z,scale));
+  treeColliders.push({x,z,r:1.1*scale});
+}
+scene.add(treeGroup);
+
+// rocks scattered for cover
+const rockColliders = [];
+const rockGroup = new THREE.Group();
+const rockMat = new THREE.MeshLambertMaterial({color:0x777777});
+for(let i=0;i<40;i++){
+  const ang = Math.random()*Math.PI*2;
+  const dist = 10 + Math.random()*115;
+  const x = Math.cos(ang)*dist, z = Math.sin(ang)*dist;
+  const s = 1 + Math.random()*1.8;
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s,0), rockMat);
+  rock.position.set(x, s*0.5, z);
+  rock.rotation.set(Math.random()*6,Math.random()*6,Math.random()*6);
+  rockGroup.add(rock);
+  rockColliders.push({x,z,r:s*0.9});
+}
+scene.add(rockGroup);
+
+function blockedByObstacle(x,z, selfR=0.5){
+  for(const t of treeColliders){
+    const dx=x-t.x, dz=z-t.z;
+    if(dx*dx+dz*dz < (t.r+selfR)*(t.r+selfR)) return true;
+  }
+  for(const r of rockColliders){
+    const dx=x-r.x, dz=z-r.z;
+    if(dx*dx+dz*dz < (r.r+selfR)*(r.r+selfR)) return true;
+  }
+  return false;
+}
+
+/* ============================================================
+   STORM — red shrinking ring (visual wall + damage zone)
+   ============================================================ */
+let stormRadius = ARENA_RADIUS + 50;
+let stormTargetRadius = ARENA_RADIUS - 10;
+const STORM_PHASES = [
+  {radius: ARENA_RADIUS-10, duration: 35, shrinkTime: 20},
+  {radius: ARENA_RADIUS-55, duration: 35, shrinkTime: 20},
+  {radius: 22, duration: 30, shrinkTime: 18},
+  {radius: 6,  duration: 9999, shrinkTime: 15},
+];
+let stormPhaseIdx = -1;
+let stormPhaseTimer = 0;
+let stormShrinking = false;
+let stormShrinkElapsed = 0;
+let stormStartRadius = stormRadius;
+
+const stormGeo = new THREE.CylinderGeometry(stormRadius, stormRadius, 80, 64, 1, true);
+const stormMat = new THREE.MeshBasicMaterial({
+  color:0xff0000, transparent:true, opacity:0.28, side:THREE.DoubleSide, depthWrite:false
+});
+const stormWall = new THREE.Mesh(stormGeo, stormMat);
+stormWall.position.y = 38;
+scene.add(stormWall);
+
+// fog/red tint to reinforce danger when shrinking
+scene.fog.color.set(0x9fc1d9);
+
+function updateStormGeometry(){
+  stormWall.geometry.dispose();
+  stormWall.geometry = new THREE.CylinderGeometry(stormRadius, stormRadius, 80, 64, 1, true);
+}
+
+function advanceStorm(dt){
+  if(stormPhaseIdx === -1){
+    stormPhaseTimer += dt;
+    if(stormPhaseTimer > 8){ // initial grace period before first shrink
+      stormPhaseIdx = 0;
+      stormPhaseTimer = 0;
+      stormShrinking = true;
+      stormShrinkElapsed = 0;
+      stormStartRadius = stormRadius;
+      stormTargetRadius = STORM_PHASES[0].radius;
+    }
+    return;
+  }
+  const phase = STORM_PHASES[stormPhaseIdx];
+  if(stormShrinking){
+    stormShrinkElapsed += dt;
+    const t = Math.min(1, stormShrinkElapsed/phase.shrinkTime);
+    stormRadius = stormStartRadius + (stormTargetRadius-stormStartRadius)*t;
+    updateStormGeometry();
+    if(t>=1){
+      stormShrinking=false;
+      stormPhaseTimer=0;
+    }
+  } else {
+    stormPhaseTimer += dt;
+    if(stormPhaseTimer > phase.duration){
+      stormPhaseIdx = Math.min(stormPhaseIdx+1, STORM_PHASES.length-1);
+      const next = STORM_PHASES[stormPhaseIdx];
+      stormStartRadius = stormRadius;
+      stormTargetRadius = next.radius;
+      stormShrinking = true;
+      stormShrinkElapsed = 0;
+      stormPhaseTimer = 0;
+    }
+  }
+}
+
+function distFromCenter(x,z){ return Math.sqrt(x*x+z*z); }
+
+/* ============================================================
+   CHARACTERS — player + bots
+   ============================================================ */
+function makeCharacterMesh(color, scale=1){
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({color});
+  const headMat = new THREE.MeshLambertMaterial({color:0xe0b08c});
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55,1.3,4,8), bodyMat);
+  body.position.y = 1.15;
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42,10,10), headMat);
+  head.position.y = 2.05;
+  g.add(head);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+class Character{
+  constructor(skin, isPlayer, x, z){
+    this.skin = skin;
+    this.isPlayer = isPlayer;
+    this.hp = skin.hp;
+    this.maxHp = skin.hp;
+    this.alive = true;
+    this.fireTimer = 0;
+    this.x = x; this.z = z;
+    this.yaw = Math.random()*Math.PI*2;
+    this.bodyR = skin.id==='wraith' ? 0.42 : 0.55;
+
+    if(!isPlayer){
+      this.mesh = makeCharacterMesh(skin.color, this.bodyR/0.55);
+      this.mesh.position.set(x,0,z);
+      scene.add(this.mesh);
+    }
+    // AI state
+    this.aiState = 'wander';
+    this.aiTarget = null;
+    this.aiTimer = Math.random()*2;
+    this.target = null; // enemy character currently engaging
+  }
+  takeDamage(dmg, attacker){
+    if(!this.alive) return;
+    this.hp -= dmg;
+    if(this.hp <= 0){
+      this.hp = 0;
+      this.die();
+    }
+  }
+  die(){
+    this.alive = false;
+    if(this.mesh){ scene.remove(this.mesh); }
+    aliveCount--;
+    updateHud();
+    if(this===player){
+      onPlayerDeath();
+    }
+  }
+}
+
+let player, bots = [];
+let aliveCount = 100;
+
+/* ============================================================
+   GAME START
+   ============================================================ */
+let keys = {};
+let yaw = 0, pitch = 0;
+let velocity = new THREE.Vector3();
+let gameRunning = false;
+let gameOver = false;
+let lastTime = performance.now();
+let elapsedTime = 0;
+
+function startGame(){
+  const skin = SKINS[chosenSkinIndex];
+  document.getElementById('skinTag').textContent = 'SKIN: ' + skin.name.toUpperCase();
+
+  player = new Character(skin, true, 0, 25);
+  player.mesh = null; // first-person, no visible body mesh for self
+
+  // spawn 99 bots scattered through the arena, varied skins
+  bots = [];
+  for(let i=0;i<99;i++){
+    const ang = Math.random()*Math.PI*2;
+    const dist = 15 + Math.random()*(ARENA_RADIUS-20);
+    const x = Math.cos(ang)*dist, z = Math.sin(ang)*dist;
+    const bSkin = SKINS[Math.floor(Math.random()*SKINS.length)];
+    const bot = new Character(bSkin, false, x, z);
+    bots.push(bot);
+  }
+  aliveCount = 100;
+  updateHud();
+
+  camera.position.set(player.x, 1.7, player.z);
+
+  gameRunning = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+/* ---------------- input: desktop ---------------- */
+window.addEventListener('keydown', e=>{ keys[e.code]=true; });
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+let pointerLocked = false;
+canvas.addEventListener('click', ()=>{
+  if(!isTouch && gameRunning && !gameOver) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', ()=>{
+  pointerLocked = document.pointerLockElement === canvas;
+});
+document.addEventListener('mousemove', e=>{
+  if(!pointerLocked) return;
+  yaw -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+});
+let mouseDown = false;
+canvas.addEventListener('mousedown', ()=>{ mouseDown = true; });
+canvas.addEventListener('mouseup', ()=>{ mouseDown = false; });
+
+/* ---------------- input: touch ---------------- */
+let joyActive=false, joyStartX=0, joyStartY=0, joyDX=0, joyDY=0;
+const joyZone = document.getElementById('joyZone');
+const joyBase = document.getElementById('joyBase');
+const joyStick = document.getElementById('joyStick');
+
+joyZone.addEventListener('touchstart', e=>{
+  const t = e.changedTouches[0];
+  joyActive = true;
+  joyStartX = t.clientX; joyStartY = t.clientY;
+  joyBase.style.display='block'; joyStick.style.display='block';
+  joyBase.style.left=(joyStartX-55)+'px'; joyBase.style.top=(joyStartY-55)+'px';
+  joyStick.style.left=(joyStartX-25)+'px'; joyStick.style.top=(joyStartY-25)+'px';
+  e.preventDefault();
+},{passive:false});
+joyZone.addEventListener('touchmove', e=>{
+  if(!joyActive) return;
+  const t = e.changedTouches[0];
+  let dx = t.clientX-joyStartX, dy = t.clientY-joyStartY;
+  const max=55;
+  const len = Math.hypot(dx,dy);
+  if(len>max){ dx = dx/len*max; dy = dy/len*max; }
+  joyDX = dx/max; joyDY = dy/max;
+  joyStick.style.left=(joyStartX+dx-25)+'px'; joyStick.style.top=(joyStartY+dy-25)+'px';
+  e.preventDefault();
+},{passive:false});
+function joyEnd(e){
+  joyActive=false; joyDX=0; joyDY=0;
+  joyBase.style.display='none'; joyStick.style.display='none';
+}
+joyZone.addEventListener('touchend', joyEnd);
+joyZone.addEventListener('touchcancel', joyEnd);
+
+let lookActive=false, lastLookX=0, lastLookY=0;
+const lookZone = document.getElementById('lookZone');
+lookZone.addEventListener('touchstart', e=>{
+  const t=e.changedTouches[0];
+  lookActive=true; lastLookX=t.clientX; lastLookY=t.clientY;
+  e.preventDefault();
+},{passive:false});
+lookZone.addEventListener('touchmove', e=>{
+  if(!lookActive) return;
+  const t=e.changedTouches[0];
+  const dx = t.clientX-lastLookX, dy = t.clientY-lastLookY;
+  yaw -= dx*0.0035;
+  pitch -= dy*0.0035;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+  lastLookX=t.clientX; lastLookY=t.clientY;
+  e.preventDefault();
+},{passive:false});
+lookZone.addEventListener('touchend', ()=>{ lookActive=false; });
+lookZone.addEventListener('touchcancel', ()=>{ lookActive=false; });
+
+let touchFiring=false;
+const shootBtn = document.getElementById('shootBtn');
+shootBtn.addEventListener('touchstart', e=>{ touchFiring=true; e.preventDefault(); },{passive:false});
+shootBtn.addEventListener('touchend', e=>{ touchFiring=false; e.preventDefault(); },{passive:false});
+
+/* ============================================================
+   PROJECTILES (simple raycast-instant + small tracer visual)
+   ============================================================ */
+const tracers = []; // {mesh, life}
+function spawnTracer(from, to){
+  const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+  const mat = new THREE.LineBasicMaterial({color:0xfff066});
+  const line = new THREE.Line(geo, mat);
+  scene.add(line);
+  tracers.push({mesh:line, life:0.08});
+}
+
+function fireFrom(shooter, originVec, dirVec){
+  shooter.fireTimer = shooter.skin.fireDelay;
+  // determine target hit: closest character within cone & range
+  const range = shooter.skin.range;
+  let best = null, bestDist = Infinity;
+  const candidates = shooter===player ? bots : [player, ...bots.filter(b=>b!==shooter)];
+  for(const c of candidates){
+    if(!c.alive) continue;
+    const cx = c===player ? camera.position.x : c.x;
+    const cz = c===player ? camera.position.z : c.z;
+    const cy = c===player ? 1.3 : 1.2;
+    const toTarget = new THREE.Vector3(cx-originVec.x, cy-originVec.y, cz-originVec.z);
+    const dist = toTarget.length();
+    if(dist > range) continue;
+    toTarget.normalize();
+    const dot = toTarget.dot(dirVec);
+    if(dot > 0.965){ // narrow-ish cone = aim accuracy
+      if(dist < bestDist){ bestDist=dist; best=c; }
+    }
+  }
+  const endPoint = originVec.clone().add(dirVec.clone().multiplyScalar(best?bestDist:Math.min(range,40)));
+  spawnTracer(originVec, endPoint);
+  if(best){
+    best.takeDamage(shooter.skin.dmg, shooter);
+    if(shooter===player) flashHitMarker();
+  }
+}
+
+function flashHitMarker(){
+  const ch = document.getElementById('crosshair');
+  ch.style.transform = 'scale(1.5)';
+  setTimeout(()=>{ ch.style.transform='scale(1)'; }, 100);
+}
+
+/* ============================================================
+   BOT AI
+   ============================================================ */
+function nearestEnemy(bot){
+  let best=null, bestDist=Infinity;
+  const all = [player, ...bots.filter(b=>b!==bot)];
+  for(const c of all){
+    if(!c.alive) continue;
+    const cx = c===player ? camera.position.x : c.x;
+    const cz = c===player ? camera.position.z : c.z;
+    const d = Math.hypot(cx-bot.x, cz-bot.z);
+    if(d<bestDist){ bestDist=d; best=c; }
+  }
+  return {target:best, dist:bestDist};
+}
+
+function updateBot(bot, dt){
+  if(!bot.alive) return;
+
+  // regen for medic-type bots
+  if(bot.skin.regen && bot.hp < bot.maxHp){
+    bot.hp = Math.min(bot.maxHp, bot.hp + bot.skin.regen*dt);
+  }
+
+  bot.fireTimer = Math.max(0, bot.fireTimer-dt);
+
+  // storm avoidance: if outside storm, move toward center urgently
+  const distC = distFromCenter(bot.x, bot.z);
+  const inStorm = distC > stormRadius - 2;
+
+  const {target, dist} = nearestEnemy(bot);
+
+  let moveX=0, moveZ=0;
+  if(inStorm){
+    // run to center
+    const ang = Math.atan2(-bot.z, -bot.x);
+    moveX = Math.cos(ang); moveZ = Math.sin(ang);
+    bot.aiState='flee-storm';
+  } else if(target && dist < 55){
+    bot.aiState='engage';
+    const tx = target===player ? camera.position.x : target.x;
+    const tz = target===player ? camera.position.z : target.z;
+    const ang = Math.atan2(tz-bot.z, tx-bot.x);
+    bot.yaw = ang;
+    // keep some distance based on weapon range; approach if far, retreat if very close
+    const desired = bot.skin.range*0.55;
+    if(dist > desired+4){ moveX=Math.cos(ang); moveZ=Math.sin(ang); }
+    else if(dist < desired-6){ moveX=-Math.cos(ang); moveZ=-Math.sin(ang); }
+    else {
+      // strafe
+      moveX = Math.cos(ang+Math.PI/2)*(bot._strafeDir||1);
+      moveZ = Math.sin(ang+Math.PI/2)*(bot._strafeDir||1);
+    }
+    if(Math.random()<0.01) bot._strafeDir = (bot._strafeDir||1)*-1;
+
+    if(dist <= bot.skin.range && bot.fireTimer<=0){
+      // line-of-sight-ish check via simple obstacle test at midpoint
+      const originVec = new THREE.Vector3(bot.x, 1.2, bot.z);
+      const dirVec = new THREE.Vector3(Math.cos(ang),0,Math.sin(ang)).normalize();
+      // small inaccuracy
+      const spread = 0.05;
+      dirVec.x += (Math.random()-0.5)*spread;
+      dirVec.z += (Math.random()-0.5)*spread;
+      dirVec.normalize();
+      fireFrom(bot, originVec, dirVec);
+    }
+  } else {
+    bot.aiState='wander';
+    bot.aiTimer -= dt;
+    if(!bot.aiTarget || bot.aiTimer<=0){
+      const ang = Math.random()*Math.PI*2;
+      const d = 10+Math.random()*30;
+      bot.aiTarget = {x: bot.x+Math.cos(ang)*d, z: bot.z+Math.sin(ang)*d};
+      bot.aiTimer = 3+Math.random()*3;
+    }
+    const ang = Math.atan2(bot.aiTarget.z-bot.z, bot.aiTarget.x-bot.x);
+    bot.yaw = ang;
+    moveX = Math.cos(ang); moveZ = Math.sin(ang);
+  }
+
+  const len = Math.hypot(moveX,moveZ);
+  if(len>0.001){
+    moveX/=len; moveZ/=len;
+    const spd = bot.skin.speed*0.85;
+    const nx = bot.x + moveX*spd*dt;
+    const nz = bot.z + moveZ*spd*dt;
+    if(!blockedByObstacle(nx,nz, bot.bodyR)){
+      bot.x = nx; bot.z = nz;
+    }
+  }
+
+  if(bot.mesh){
+    bot.mesh.position.set(bot.x,0,bot.z);
+    bot.mesh.rotation.y = -bot.yaw + Math.PI/2;
+  }
+
+  // storm damage
+  if(inStorm){
+    bot.takeDamage(6*dt, null);
+  }
+}
+
+/* ============================================================
+   PLAYER UPDATE
+   ============================================================ */
+function updatePlayer(dt){
+  if(!player.alive) return;
+
+  // regen
+  if(player.skin.regen && player.hp < player.maxHp){
+    player.hp = Math.min(player.maxHp, player.hp + player.skin.regen*dt);
+  }
+  player.fireTimer = Math.max(0, player.fireTimer-dt);
+
+  camera.rotation.order='YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  let fx=0, fz=0; // forward/strafe input
+  if(isTouch){
+    fx = joyDX; fz = joyDY;
+  } else {
+    if(keys['KeyW']) fz -= 1;
+    if(keys['KeyS']) fz += 1;
+    if(keys['KeyA']) fx -= 1;
+    if(keys['KeyD']) fx += 1;
+  }
+  const len = Math.hypot(fx,fz);
+  if(len>0.001){
+    fx/=len; fz/=len;
+    const forward = new THREE.Vector3(Math.sin(yaw), 0, -Math.cos(yaw)*-1); // placeholder, replaced below
+  }
+
+  // build movement basis from yaw
+  const forwardVec = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const rightVec = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  const moveVec = new THREE.Vector3();
+  moveVec.addScaledVector(forwardVec, -fz);
+  moveVec.addScaledVector(rightVec, fx);
+  if(moveVec.lengthSq()>0.0001){
+    moveVec.normalize();
+    const spd = player.skin.speed;
+    const nx = camera.position.x + moveVec.x*spd*dt;
+    const nz = camera.position.z + moveVec.z*spd*dt;
+    if(!blockedByObstacle(nx, camera.position.z, player.bodyR)) camera.position.x = nx;
+    if(!blockedByObstacle(camera.position.x, nz, player.bodyR)) camera.position.z = nz;
+  }
+  camera.position.y = 1.7;
+  player.x = camera.position.x; player.z = camera.position.z;
+
+  // clamp loosely to playable bounds (don't let them wander forever)
+  const d = distFromCenter(player.x, player.z);
+  if(d > ARENA_RADIUS+38){
+    const ang = Math.atan2(player.z, player.x);
+    camera.position.x = Math.cos(ang)*(ARENA_RADIUS+38);
+    camera.position.z = Math.sin(ang)*(ARENA_RADIUS+38);
+    player.x = camera.position.x; player.z = camera.position.z;
+  }
+
+  const firing = isTouch ? touchFiring : mouseDown;
+  if(firing && player.fireTimer<=0){
+    const dirVec = new THREE.Vector3();
+    camera.getWorldDirection(dirVec);
+    fireFrom(player, camera.position.clone(), dirVec);
+  }
+
+  // storm damage
+  const distC = distFromCenter(player.x, player.z);
+  if(distC > stormRadius - 2){
+    player.takeDamage(6*dt, null);
+  }
+}
+
+/* ============================================================
+   HUD + END STATE
+   ============================================================ */
+function updateHud(){
+  document.getElementById('aliveCount').textContent = aliveCount + ' ALIVE';
+  if(player && player.alive){
+    const pct = Math.max(0, player.hp/player.maxHp*100);
+    document.getElementById('healthBar').style.width = pct+'%';
+    document.getElementById('healthText').textContent = Math.ceil(player.hp)+' / '+player.maxHp;
+  }
+  if(stormPhaseIdx===-1){
+    document.getElementById('stormTimer').textContent = 'Storm forming...';
+  } else if(stormShrinking){
+    document.getElementById('stormTimer').textContent = 'STORM CLOSING';
+  } else {
+    document.getElementById('stormTimer').textContent = 'Storm holding';
+  }
+}
+
+function onPlayerDeath(){
+  endGame(false);
+}
+
+function checkWinCondition(){
+  const botsAlive = bots.filter(b=>b.alive).length;
+  if(player.alive && botsAlive===0){
+    endGame(true);
+  }
+}
+
+function endGame(won){
+  if(gameOver) return;
+  gameOver = true;
+  gameRunning = false;
+  document.exitPointerLock && document.exitPointerLock();
+  const screen = document.getElementById('endScreen');
+  document.getElementById('endTitle').textContent = won ? 'VICTORY' : 'ELIMINATED';
+  document.getElementById('endTitle').style.color = won ? '#ffd84a' : '#ff3b3b';
+  document.getElementById('endSub').textContent = won
+    ? 'You are the last one standing in BLURT.'
+    : aliveCount + ' players remained when you fell.';
+  screen.style.display='flex';
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function loop(now){
+  if(!gameRunning){ return; }
+  const dt = Math.min(0.05, (now-lastTime)/1000);
+  lastTime = now;
+  elapsedTime += dt;
+
+  advanceStorm(dt);
+  updatePlayer(dt);
+  for(const b of bots) updateBot(b, dt);
+
+  // tracer cleanup
+  for(let i=tracers.length-1;i>=0;i--){
+    tracers[i].life -= dt;
+    if(tracers[i].life<=0){
+      scene.remove(tracers[i].mesh);
+      tracers.splice(i,1);
+    }
+  }
+
+  checkWinCondition();
+  updateHud();
+
+  renderer.render(scene, camera);
+  if(!gameOver) requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
